@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BST Visualizer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0a0a0f;
+    --surface: #111118;
+    --border:  #1e1e2e;
+    --accent:  #7c3aed;
+    --accent2: #06b6d4;
+    --danger:  #ef4444;
+    --success: #22c55e;
+    --text:    #e4e4f0;
+    --muted:   #6b6b8a;
+    --node-r:  22;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 1.4rem 2rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  header h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  header span { color: var(--muted); font-size: .75rem; }
+
+  .controls {
+    display: flex;
+    gap: .6rem;
+    padding: 1rem 2rem;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+  }
+
+  input[type=number] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: .85rem;
+    padding: .5rem .8rem;
+    width: 90px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  input[type=number]:focus { border-color: var(--accent); }
+
+  button {
+    font-family: 'Space Mono', monospace;
+    font-size: .78rem;
+    font-weight: 700;
+    padding: .5rem 1rem;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all .15s;
+  }
+
+  .btn-primary { background: var(--accent);  color: #fff; }
+  .btn-search  { background: var(--accent2); color: #000; }
+  .btn-delete  { background: transparent; color: var(--danger); border-color: var(--danger); }
+  .btn-reset   { background: transparent; color: var(--muted);  border-color: var(--border); }
+
+  button:hover { opacity: .85; transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+
+  .canvas-wrap {
+    flex: 1;
+    overflow: auto;
+    padding: 1rem;
+    position: relative;
+  }
+
+  svg { display: block; }
+
+  .stats {
+    display: flex;
+    gap: 1.5rem;
+    padding: .8rem 2rem;
+    border-top: 1px solid var(--border);
+    font-size: .75rem;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+
+  .stats b { color: var(--text); }
+
+  .traversals {
+    padding: .8rem 2rem;
+    border-top: 1px solid var(--border);
+    font-size: .75rem;
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .traversal-group { display: flex; flex-direction: column; gap: .25rem; }
+  .traversal-label { color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-size: .65rem; }
+  .traversal-vals  { color: var(--accent2); }
+
+  .toast {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    padding: .6rem 1.2rem;
+    border-radius: 8px;
+    font-size: .8rem;
+    font-weight: 700;
+    opacity: 0;
+    transition: opacity .3s;
+    pointer-events: none;
+    z-index: 99;
+  }
+  .toast.show { opacity: 1; }
+  .toast.ok   { background: var(--success); color: #000; }
+  .toast.err  { background: var(--danger);  color: #fff; }
+
+  /* SVG node styles set via JS attributes */
+</style>
+</head>
+<body>
+
+<header>
+  <h1>BST Visualizer</h1>
+  <span>Binary Search Tree · Insert · Search · Delete · Traverse</span>
+</header>
+
+<div class="controls">
+  <input id="numInput" type="number" placeholder="value…" min="-999" max="999" />
+  <button class="btn-primary" onclick="handleInsert()">Insert</button>
+  <button class="btn-search"  onclick="handleSearch()">Search</button>
+  <button class="btn-delete"  onclick="handleDelete()">Delete</button>
+  <button class="btn-reset"   onclick="resetTree()">Reset</button>
+  <button class="btn-reset"   onclick="loadDemo()">Load Demo</button>
+</div>
+
+<div class="canvas-wrap">
+  <svg id="treeSvg" width="900" height="420"></svg>
+</div>
+
+<div class="traversals" id="traversalDisplay"></div>
+<div class="stats" id="statsDisplay"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ── BST Core Logic (mirrored in JS for the UI) ────────────────────────────
+class BSTNode { constructor(v){ this.v=v; this.left=null; this.right=null; } }
+
+class BSTEngine {
+  constructor(){ this.root=null; }
+
+  insert(v) { this.root = this._ins(this.root, v); }
+  _ins(n, v) {
+    if (!n) return new BSTNode(v);
+    if (v < n.v) n.left  = this._ins(n.left, v);
+    else if (v > n.v) n.right = this._ins(n.right, v);
+    return n;
+  }
+
+  search(v) { return this._srch(this.root, v); }
+  _srch(n, v) {
+    if (!n) return false;
+    if (v === n.v) return true;
+    return v < n.v ? this._srch(n.left, v) : this._srch(n.right, v);
+  }
+
+  delete(v) { this.root = this._del(this.root, v); }
+  _del(n, v) {
+    if (!n) return null;
+    if (v < n.v) { n.left = this._del(n.left, v); }
+    else if (v > n.v) { n.right = this._del(n.right, v); }
+    else {
+      if (!n.left) return n.right;
+      if (!n.right) return n.left;
+      let s = n.right; while (s.left) s = s.left;
+      n.v = s.v; n.right = this._del(n.right, s.v);
+    }
+    return n;
+  }
+
+  inorder()   { const r=[]; this._in(this.root, r);  return r; }
+  preorder()  { const r=[]; this._pre(this.root, r); return r; }
+  postorder() { const r=[]; this._post(this.root,r); return r; }
+  _in(n,r)   { if(!n)return; this._in(n.left,r);  r.push(n.v); this._in(n.right,r); }
+  _pre(n,r)  { if(!n)return; r.push(n.v); this._pre(n.left,r);  this._pre(n.right,r); }
+  _post(n,r) { if(!n)return; this._post(n.left,r); this._post(n.right,r); r.push(n.v); }
+
+  height() { return this._h(this.root); }
+  _h(n) { return n ? 1+Math.max(this._h(n.left),this._h(n.right)) : 0; }
+  count() { return this._c(this.root); }
+  _c(n) { return n ? 1+this._c(n.left)+this._c(n.right) : 0; }
+}
+
+// ── State & Render ────────────────────────────────────────────────────────
+const bst = new BSTEngine();
+let highlightNode = null;
+let highlightColor = null;
+
+function render() {
+  const svg = document.getElementById('treeSvg');
+  svg.innerHTML = '';
+  const W = 900, R = 22;
+  const positions = {};
+
+  function layout(node, depth, left, right) {
+    if (!node) return;
+    const x = (left + right) / 2;
+    const y = depth * 80 + 50;
+    positions[node.v] = { x, y, node };
+    layout(node.left, depth+1, left, (left+right)/2);
+    layout(node.right, depth+1, (left+right)/2, right);
+  }
+
+  const treeH = bst.height();
+  const svgH = Math.max(420, treeH * 80 + 80);
+  svg.setAttribute('height', svgH);
+  layout(bst.root, 0, 0, W);
+
+  // Draw edges
+  for (const [v, { x, y, node }] of Object.entries(positions)) {
+    if (node.left  && positions[node.left.v])  drawEdge(svg, x, y, positions[node.left.v].x,  positions[node.left.v].y,  R);
+    if (node.right && positions[node.right.v]) drawEdge(svg, x, y, positions[node.right.v].x, positions[node.right.v].y, R);
+  }
+
+  // Draw nodes
+  for (const [v, { x, y }] of Object.entries(positions)) {
+    const isHL = parseInt(v) === highlightNode;
+    const fill   = isHL ? (highlightColor || '#7c3aed') : '#1e1e2e';
+    const stroke = isHL ? (highlightColor || '#7c3aed') : '#3b3b5c';
+    const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    Object.entries({ cx:x, cy:y, r:R, fill, stroke, 'stroke-width':2 }).forEach(([a,b])=>circle.setAttribute(a,b));
+    svg.appendChild(circle);
+    const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+    Object.entries({ x, y:y+1, 'text-anchor':'middle', 'dominant-baseline':'middle', fill:'#e4e4f0', 'font-size':12, 'font-family':'Space Mono,monospace', 'font-weight':700 }).forEach(([a,b])=>text.setAttribute(a,b));
+    text.textContent = v;
+    svg.appendChild(text);
+  }
+
+  updatePanels();
+}
+
+function drawEdge(svg, x1, y1, x2, y2, R) {
+  const dx=x2-x1, dy=y2-y1, len=Math.sqrt(dx*dx+dy*dy);
+  const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+  Object.entries({
+    x1: x1+dx/len*R, y1: y1+dy/len*R,
+    x2: x2-dx/len*R, y2: y2-dy/len*R,
+    stroke:'#3b3b5c', 'stroke-width':1.5
+  }).forEach(([a,b])=>line.setAttribute(a,b));
+  svg.appendChild(line);
+}
+
+function updatePanels() {
+  document.getElementById('traversalDisplay').innerHTML = `
+    <div class="traversal-group"><span class="traversal-label">Inorder</span><span class="traversal-vals">${bst.inorder().join(' → ')}</span></div>
+    <div class="traversal-group"><span class="traversal-label">Preorder</span><span class="traversal-vals">${bst.preorder().join(' → ')}</span></div>
+    <div class="traversal-group"><span class="traversal-label">Postorder</span><span class="traversal-vals">${bst.postorder().join(' → ')}</span></div>
+  `;
+  document.getElementById('statsDisplay').innerHTML = `
+    <span>Nodes: <b>${bst.count()}</b></span>
+    <span>Height: <b>${bst.height()}</b></span>
+    <span>Root: <b>${bst.root ? bst.root.v : '—'}</b></span>
+  `;
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────
+function getValue() {
+  const v = parseInt(document.getElementById('numInput').value);
+  if (isNaN(v)) { showToast('Enter a number first', 'err'); return null; }
+  return v;
+}
+
+function handleInsert() {
+  const v = getValue(); if (v===null) return;
+  bst.insert(v); highlightNode=v; highlightColor='#7c3aed';
+  render(); showToast(`Inserted ${v}`, 'ok');
+  setTimeout(()=>{ highlightNode=null; render(); }, 1200);
+}
+
+function handleSearch() {
+  const v = getValue(); if (v===null) return;
+  const found = bst.search(v);
+  highlightNode=v; highlightColor = found ? '#22c55e' : '#ef4444';
+  render(); showToast(found ? `Found ${v}!` : `${v} not found`, found ? 'ok' : 'err');
+  setTimeout(()=>{ highlightNode=null; render(); }, 1400);
+}
+
+function handleDelete() {
+  const v = getValue(); if (v===null) return;
+  if (!bst.search(v)) { showToast(`${v} not in tree`, 'err'); return; }
+  highlightNode=v; highlightColor='#ef4444'; render();
+  setTimeout(()=>{ bst.delete(v); highlightNode=null; render(); showToast(`Deleted ${v}`, 'ok'); }, 600);
+}
+
+function resetTree() { bst.root=null; highlightNode=null; render(); showToast('Tree cleared','ok'); }
+
+function loadDemo() {
+  bst.root=null;
+  [50,30,70,20,40,60,80,10,25,35,45].forEach(v=>bst.insert(v));
+  render(); showToast('Demo tree loaded','ok');
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent=msg; t.className=`toast show ${type}`;
+  setTimeout(()=>t.className='toast', 2000);
+}
+
+document.getElementById('numInput').addEventListener('keydown', e => {
+  if (e.key==='Enter') handleInsert();
+});
+
+loadDemo();
+</script>
+</body>
+</html>
