@@ -1,0 +1,17 @@
+app:
+  name: bst-multi-lang
+  version: 1.0.0
+
+server:
+  host: 127.0.0.1
+  port: 8080
+
+features:
+  enable_logging: true
+  enable_metrics: false
+
+languages:
+  - java
+  - rust
+  - go
+  - csharp
